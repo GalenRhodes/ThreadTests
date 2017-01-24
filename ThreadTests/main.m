@@ -14,6 +14,8 @@
 
 typedef void *pVoid;
 
+char *const semaphoreName = "/test2";
+
 typedef struct {
 	struct timespec timeout;
 	pthread_t       mainThread;
@@ -83,8 +85,8 @@ static void *threadOne(pVoid args) {
 	return (pVoid)(long)0;
 }
 
-static void ignoreSignal(int Signal) {
-	Signal = 0;
+static void ignoreSignal(int ignoredSignal) {
+	ignoredSignal = 0;
 }
 
 static void *threadTwo(pVoid ptr) {
@@ -123,7 +125,7 @@ static void *threadTwo(pVoid ptr) {
 }
 
 static int createTestSemaphore(sem_t **sem) {
-	*sem = sem_open("/test", O_CREAT, S_IWUSR | S_IRUSR, 1);
+	*sem = sem_open(semaphoreName, O_CREAT, S_IWUSR | S_IRUSR, 1);
 
 	if(*sem == SEM_FAILED) {
 		NSLog(@"Open semaphore failed: %@", [NSString stringWithUTF8String:strerror(errno)]);
@@ -154,6 +156,9 @@ static int createWorkerThread(pthread_t *aThread, WaitData *waitData) {
 
 static void threadCleanup2(void *ptr) {
 	NSLog(@"sem_wait() thread cleanup routine called...");
+	pthread_t *aThread = (pthread_t *)ptr;
+
+	pthread_join(*aThread, NULL);
 }
 
 int main(int argc, const char *argv[]) {
@@ -170,7 +175,7 @@ int main(int argc, const char *argv[]) {
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wreturn-stack-address"
 		pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &savedState);
-		pthread_cleanup_push(threadCleanup2, NULL);
+		pthread_cleanup_push(threadCleanup2, &aThread);
 
 			results = createTestSemaphore(&sem);
 
@@ -189,6 +194,9 @@ int main(int argc, const char *argv[]) {
 						NSLog(@"sem_wait() exited normally.");
 					}
 				}
+
+				sem_close(sem);
+				sem_unlink(semaphoreName);
 			}
 
 		pthread_cleanup_pop(1);
